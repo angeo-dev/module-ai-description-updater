@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="Angeo AI Description Updater">
+    <description>PHP CodeSniffer rules for angeo/module-ai-description-updater</description>
+
+    <!-- Scan these paths -->
+    <file>Api</file>
+    <file>Console</file>
+    <file>Controller</file>
+    <file>Cron</file>
+    <file>Model</file>
+    <file>Service</file>
+    <file>Ui</file>
+
+    <!-- Exclude generated and vendor code -->
+    <exclude-pattern>*/Test/*</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+
+    <!-- PHP version -->
+    <config name="php_version" value="80200"/>
+
+    <!-- Base standards -->
+    <rule ref="PSR12"/>
+    <rule ref="Magento2">
+        <!-- Allow short ternary -->
+        <exclude name="Magento2.Functions.DiscouragedFunction"/>
+    </rule>
+
+    <!-- Line length: warn at 120, error at 160 -->
+    <rule ref="Generic.Files.LineLength">
+        <properties>
+            <property name="lineLimit" value="120"/>
+            <property name="absoluteLineLimit" value="160"/>
+        </properties>
+    </rule>
+
+    <!-- Require declare(strict_types=1) -->
+    <rule ref="SlevomatCodingStandard.TypeHints.DeclareStrictTypes">
+        <properties>
+            <property name="declareOnFirstLine" value="false"/>
+            <property name="linesCountBeforeDeclare" value="1"/>
+            <property name="linesCountAfterDeclare" value="1"/>
+            <property name="spacesCountAroundEqualsSign" value="0"/>
+        </properties>
+    </rule>
+
+    <!-- Require return types -->
+    <rule ref="SlevomatCodingStandard.TypeHints.ReturnTypeHint"/>
+
+    <!-- Require parameter types -->
+    <rule ref="SlevomatCodingStandard.TypeHints.ParameterTypeHint">
+        <exclude name="SlevomatCodingStandard.TypeHints.ParameterTypeHint.MissingNativeTypeHint"/>
+    </rule>
+
+    <!-- Unused use statements -->
+    <rule ref="SlevomatCodingStandard.Namespaces.UnusedUses">
+        <properties>
+            <property name="searchAnnotations" value="true"/>
+        </properties>
+    </rule>
+
+    <!-- No unused variables -->
+    <rule ref="SlevomatCodingStandard.Variables.UnusedVariable"/>
+</ruleset>

@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!-- ── Dedicated logger ─────────────────────────────────────────────── -->
+    <virtualType name="Angeo\AiDescriptionUpdater\Logger\Handler" type="Magento\Framework\Logger\Handler\Base">
+        <arguments>
+            <argument name="fileName" xsi:type="string">/var/log/angeo_ai_description_updater.log</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="Angeo\AiDescriptionUpdater\Logger\Logger" type="Magento\Framework\Logger\Monolog">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="system" xsi:type="object">Angeo\AiDescriptionUpdater\Logger\Handler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+
+    <!-- ── Inject logger into services ──────────────────────────────────── -->
+    <type name="Angeo\AiDescriptionUpdater\Service\DescriptionUpdaterService">
+        <arguments>
+            <argument name="logger" xsi:type="object">Angeo\AiDescriptionUpdater\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="Angeo\AiDescriptionUpdater\Service\MagentoProductService">
+        <arguments>
+            <argument name="logger" xsi:type="object">Angeo\AiDescriptionUpdater\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="Angeo\AiDescriptionUpdater\Service\GoogleSheetsService">
+        <arguments>
+            <argument name="logger" xsi:type="object">Angeo\AiDescriptionUpdater\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="Angeo\AiDescriptionUpdater\Service\GoogleDriveService">
+        <arguments>
+            <argument name="logger" xsi:type="object">Angeo\AiDescriptionUpdater\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="Angeo\AiDescriptionUpdater\Service\GoogleSheetsExportService">
+        <arguments>
+            <argument name="logger" xsi:type="object">Angeo\AiDescriptionUpdater\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="Angeo\AiDescriptionUpdater\Cron\UpdateDescriptions">
+        <arguments>
+            <argument name="logger" xsi:type="object">Angeo\AiDescriptionUpdater\Logger\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- ── Provider registry ─────────────────────────────────────────────── -->
+    <type name="Angeo\AiDescriptionUpdater\Service\AiProviderService">
+        <arguments>
+            <argument name="providers" xsi:type="array">
+                <item name="openai" xsi:type="object">Angeo\AiDescriptionUpdater\Service\Provider\OpenAiProvider</item>
+                <item name="claude" xsi:type="object">Angeo\AiDescriptionUpdater\Service\Provider\ClaudeProvider</item>
+                <item name="gemini" xsi:type="object">Angeo\AiDescriptionUpdater\Service\Provider\GeminiProvider</item>
+                <item name="groq"   xsi:type="object">Angeo\AiDescriptionUpdater\Service\Provider\GroqProvider</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- ── CLI command ───────────────────────────────────────────────────── -->
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="angeo_ai_description_run" xsi:type="object">Angeo\AiDescriptionUpdater\Console\Command\RunUpdaterCommand</item>
+            </argument>
+        </arguments>
+    </type>
+
+</config>

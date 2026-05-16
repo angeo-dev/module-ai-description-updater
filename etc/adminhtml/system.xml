@@ -1,0 +1,419 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="angeo_aeo" translate="label" sortOrder="200">
+            <label>Angeo AEO</label>
+        </tab>
+
+        <section id="angeo_ai_description" translate="label" sortOrder="10"
+                 showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>AI Description Updater</label>
+            <tab>angeo_aeo</tab>
+            <resource>Angeo_AiDescriptionUpdater::config</resource>
+
+            <!-- ── General ──────────────────────────────────────────────── -->
+            <group id="general" translate="label" sortOrder="10"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>General Settings</label>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Module</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Enable or disable the AI Description Updater module.</comment>
+                </field>
+                <field id="dry_run" translate="label comment" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Dry Run Mode</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Descriptions are generated but NOT saved. Safe for testing.</comment>
+                </field>
+                <field id="log_enabled" translate="label comment" type="select" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enable Detailed Logging</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Logs to var/log/angeo_ai_description_updater.log</comment>
+                </field>
+                <field id="batch_size" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Batch Size</label>
+                    <comment>Products per cron run. Default: 50.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+            </group>
+
+            <!-- ── AI Provider ──────────────────────────────────────────── -->
+            <group id="ai_provider" translate="label" sortOrder="15"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>AI Provider</label>
+                <field id="provider" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>AI Provider</label>
+                    <source_model>Angeo\AiDescriptionUpdater\Model\Config\Source\AiProvider</source_model>
+                    <comment>Choose which AI service to use: OpenAI, Anthropic Claude, or Google Gemini.</comment>
+                </field>
+            </group>
+
+            <!-- ── OpenAI ───────────────────────────────────────────────── -->
+            <group id="openai" translate="label" sortOrder="20"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>OpenAI (ChatGPT) Settings</label>
+                <comment>Used when AI Provider is set to "OpenAI".</comment>
+                <field id="api_key" translate="label comment" type="obscure" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>OpenAI API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Starts with sk-. Get it at platform.openai.com.</comment>
+                </field>
+                <field id="model" translate="label" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>GPT Model</label>
+                    <source_model>Angeo\AiDescriptionUpdater\Model\Config\Source\GptModel</source_model>
+                </field>
+                <field id="temperature" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Temperature</label>
+                    <comment>0.0 = deterministic, 1.0 = very creative. Default: 0.7.</comment>
+                    <validate>validate-number</validate>
+                </field>
+                <field id="max_tokens" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Max Tokens</label>
+                    <comment>Default: 800.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+                <field id="timeout" translate="label comment" type="text" sortOrder="50"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Request Timeout (s)</label>
+                    <comment>Default: 30.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+            </group>
+
+            <!-- ── Claude ───────────────────────────────────────────────── -->
+            <group id="claude" translate="label" sortOrder="25"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Anthropic (Claude) Settings</label>
+                <comment>Used when AI Provider is set to "Anthropic Claude".</comment>
+                <field id="api_key" translate="label comment" type="obscure" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Claude API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Starts with sk-ant-. Get it at console.anthropic.com.</comment>
+                </field>
+                <field id="model" translate="label" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Claude Model</label>
+                    <source_model>Angeo\AiDescriptionUpdater\Model\Config\Source\ClaudeModel</source_model>
+                </field>
+                <field id="max_tokens" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Max Output Tokens</label>
+                    <comment>Default: 1024.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+                <field id="timeout" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Request Timeout (s)</label>
+                    <comment>Default: 60. Extended thinking may need more.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+                <field id="extended_thinking" translate="label comment" type="select" sortOrder="50"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enable Extended Thinking</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Deeper reasoning before generating. Higher quality, more tokens. Supported on Claude 4.x.</comment>
+                </field>
+                <field id="thinking_budget" translate="label comment" type="text" sortOrder="60"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Thinking Token Budget</label>
+                    <comment>Minimum 1024. Default: 2048. Billed as output tokens.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                    <depends>
+                        <field id="extended_thinking">1</field>
+                    </depends>
+                </field>
+            </group>
+
+            <!-- ── Gemini ────────────────────────────────────────────────── -->
+            <group id="gemini" translate="label" sortOrder="28"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Google (Gemini) Settings</label>
+                <comment>Used when AI Provider is set to "Google Gemini". Get your API key at aistudio.google.com.</comment>
+                <field id="api_key" translate="label comment" type="obscure" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Gemini API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Get a free API key at aistudio.google.com/app/apikey. Stored encrypted.</comment>
+                </field>
+                <field id="model" translate="label comment" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Gemini Model</label>
+                    <source_model>Angeo\AiDescriptionUpdater\Model\Config\Source\GeminiModel</source_model>
+                    <comment>gemini-2.0-flash is recommended for most stores: fast and affordable.</comment>
+                </field>
+                <field id="temperature" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Temperature</label>
+                    <comment>0.0 = deterministic, 2.0 = very creative. Default: 0.7.</comment>
+                    <validate>validate-number</validate>
+                </field>
+                <field id="max_tokens" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Max Output Tokens</label>
+                    <comment>Default: 1024. Gemini 2.x supports up to 8192.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+                <field id="timeout" translate="label comment" type="text" sortOrder="50"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Request Timeout (s)</label>
+                    <comment>Default: 30.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+            </group>
+
+
+            <!-- ── Groq ─────────────────────────────────────────────────── -->
+            <group id="groq" translate="label" sortOrder="45"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Groq Settings (Free)</label>
+                <comment>Used when AI Provider is set to "Groq". Free tier: 30 RPM, 14,400 RPD. No credit card required. Get your API key at console.groq.com.</comment>
+                <field id="api_key" translate="label comment" type="obscure" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Groq API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Starts with gsk_. Get it free at console.groq.com. Stored encrypted.</comment>
+                </field>
+                <field id="model" translate="label comment" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Model</label>
+                    <source_model>Angeo\AiDescriptionUpdater\Model\Config\Source\GroqModel</source_model>
+                </field>
+                <field id="temperature" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Temperature</label>
+                    <comment>0.0–2.0. Default: 0.7.</comment>
+                    <validate>validate-number</validate>
+                </field>
+                <field id="max_tokens" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Max Output Tokens</label>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+                <field id="timeout" translate="label comment" type="text" sortOrder="50"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Request Timeout (s)</label>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                </field>
+            </group>
+
+            <!-- ── Prompt ────────────────────────────────────────────────── -->
+            <group id="prompt" translate="label" sortOrder="30"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Prompt Configuration</label>
+                <field id="system_role" translate="label comment" type="textarea" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>System Role</label>
+                    <comment>Sent as the AI system prompt. Example: "You are a professional product copywriter."</comment>
+                </field>
+                <field id="prompt_template" translate="label comment" type="textarea" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Prompt Template (global fallback)</label>
+                    <comment>Use {{product_name}}, {{product_sku}}, {{store_name}} as placeholders.</comment>
+                </field>
+                <field id="language" translate="label" type="select" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Description Language</label>
+                    <source_model>Angeo\AiDescriptionUpdater\Model\Config\Source\Language</source_model>
+                </field>
+                <field id="include_seo" translate="label" type="select" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Include SEO Keywords</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+            </group>
+
+            <!-- ── Attributes ────────────────────────────────────────────── -->
+            <group id="attributes" translate="label" sortOrder="35"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Attributes to Generate</label>
+                <comment>Enable each attribute independently. Each can have its own prompt override.</comment>
+
+                <field id="description_enabled" translate="label" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Generate Description (HTML)</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="description_prompt" translate="label comment" type="textarea" sortOrder="11"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Description — Custom Prompt</label>
+                    <comment>Leave empty to use the built-in default. Use {{product_name}} etc.</comment>
+                    <depends><field id="description_enabled">1</field></depends>
+                </field>
+
+                <field id="short_description_enabled" translate="label" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Generate Short Description (plain text)</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="short_description_prompt" translate="label comment" type="textarea" sortOrder="21"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Short Description — Custom Prompt</label>
+                    <comment>Leave empty to use the built-in default.</comment>
+                    <depends><field id="short_description_enabled">1</field></depends>
+                </field>
+                <field id="short_description_length" translate="label comment" type="text" sortOrder="22"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Short Description Max Length (chars)</label>
+                    <comment>Default: 150.</comment>
+                    <validate>validate-number validate-greater-than-zero</validate>
+                    <depends><field id="short_description_enabled">1</field></depends>
+                </field>
+
+                <field id="meta_title_enabled" translate="label" type="select" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Generate Meta Title</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="meta_title_prompt" translate="label comment" type="textarea" sortOrder="31"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Meta Title — Custom Prompt</label>
+                    <comment>Leave empty to use the built-in default.</comment>
+                    <depends><field id="meta_title_enabled">1</field></depends>
+                </field>
+
+                <field id="meta_keyword_enabled" translate="label" type="select" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Generate Meta Keywords</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="meta_keyword_prompt" translate="label comment" type="textarea" sortOrder="41"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Meta Keywords — Custom Prompt</label>
+                    <depends><field id="meta_keyword_enabled">1</field></depends>
+                </field>
+
+                <field id="meta_description_enabled" translate="label" type="select" sortOrder="50"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Generate Meta Description</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="meta_description_prompt" translate="label comment" type="textarea" sortOrder="51"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Meta Description — Custom Prompt</label>
+                    <depends><field id="meta_description_enabled">1</field></depends>
+                </field>
+            </group>
+
+            <!-- ── Google Sheets ─────────────────────────────────────────── -->
+            <group id="google_sheets" translate="label" sortOrder="50"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Google Sheets Source</label>
+                <field id="enabled" translate="label" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enable Google Sheets Source</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Read product SKUs from a public Google Spreadsheet instead of all active products.</comment>
+                </field>
+                <field id="spreadsheet_id" translate="label comment" type="text" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Spreadsheet ID</label>
+                    <comment>The ID from the Google Sheets URL: /spreadsheets/d/[ID]/edit</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="gid" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Sheet GID</label>
+                    <comment>Tab ID from URL (?gid=...). Default: 0 (first sheet).</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="sku_column_index" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>SKU Column Index (0-based)</label>
+                    <validate>validate-number</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+
+            <!-- ── Export ────────────────────────────────────────────────── -->
+            <group id="export" translate="label" sortOrder="60"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Export / Output</label>
+                <field id="csv_enabled" translate="label" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Save CSV Report</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Save a CSV report to var/angeo/ai_description_updater/.</comment>
+                </field>
+                <field id="csv_filename" translate="label comment" type="text" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>CSV Filename Pattern</label>
+                    <comment>Use {{date}} placeholder. E.g. ai_descriptions_{{date}}.csv</comment>
+                    <depends><field id="csv_enabled">1</field></depends>
+                </field>
+                <field id="notify_email" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Notification Email</label>
+                    <comment>Send a summary email after each run. Leave empty to disable.</comment>
+                    <validate>validate-email</validate>
+                </field>
+            </group>
+
+            <!-- ── Google Sheets Export ───────────────────────────────── -->
+            <group id="google_drive" translate="label" sortOrder="65"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Google Sheets Export</label>
+                <comment>Write generated descriptions directly to a Google Spreadsheet after each run. Requires a Service Account with Sheets API access.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enable Google Sheets Export</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="service_account_json" translate="label comment" type="obscure" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Service Account JSON</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Step 1: console.cloud.google.com → IAM → Service Accounts → Create → Keys → Add Key → JSON. Copy the client_email from the downloaded file — you will need it in the next step. Stored encrypted.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="spreadsheet_id" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Spreadsheet ID</label>
+                    <comment>Step 2: Create a Google Spreadsheet, share it with the client_email from your Service Account JSON (Editor role), then paste the Spreadsheet ID from the URL: /spreadsheets/d/[ID]/edit</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="sheet_name" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Sheet Tab Name</label>
+                    <comment>Name of the tab to write to (e.g. Sheet1). Default: Sheet1.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="overwrite_existing" translate="label" type="select" sortOrder="50"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Clear Sheet Before Write</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Yes = clear all rows before writing. No = append new rows.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+
+            <!-- ── Cron ─────────────────────────────────────────────────── -->
+            <group id="cron" translate="label" sortOrder="70"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Cron Schedule</label>
+                <field id="enabled" translate="label" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enable Cron</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="schedule" translate="label comment" type="text" sortOrder="20"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Cron Expression</label>
+                    <comment>Example: 0 2 * * * (every day at 2am).</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+
+        </section>
+    </system>
+</config>

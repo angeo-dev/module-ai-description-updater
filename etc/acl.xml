@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Acl/etc/acl.xsd">
+    <acl>
+        <resources>
+            <resource id="Magento_Backend::admin" title="Admin">
+                <resource id="Angeo_AiDescriptionUpdater::root" title="AI Description Updater" sortOrder="200">
+                    <resource id="Angeo_AiDescriptionUpdater::config" title="Configuration" sortOrder="10"/>
+                    <resource id="Angeo_AiDescriptionUpdater::run"    title="Run Manually"   sortOrder="20"/>
+                </resource>
+            </resource>
+        </resources>
+    </acl>
+</config>

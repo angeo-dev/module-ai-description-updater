@@ -1,0 +1,46 @@
+parameters:
+    # Analysis level: 0 (basic) to 9 (strictest). Start at 5, increase over time.
+    level: 5
+
+    paths:
+        - Api
+        - Console
+        - Controller
+        - Cron
+        - Model
+        - Service
+        - Ui
+
+    excludePaths:
+        - Test
+        - vendor
+
+    # PHP version to analyse for
+    phpVersion: 80200
+
+    # Treat PHPDoc @throws as checked exceptions
+    checkMissingIterableValueType: true
+    checkGenericClassInNonGenericObjectType: true
+
+    # Magento-specific: ignore missing classes from framework (loaded at runtime)
+    ignoreErrors:
+        # Magento DI-generated factories — not present in source
+        - '#.*Factory.*not found#'
+        - '#.*Collection.*not found#'
+
+        # Magento magic methods on models (getData, setData etc.)
+        - '#Call to an undefined method Magento\\Framework\\Model\\AbstractModel#'
+
+        # Magento ObjectManager usage in legacy areas
+        - '#Call to method (get|create) on.*ObjectManager#'
+
+    # Treat these namespaces as stubs if Magento is not in vendor
+    stubFiles: []
+
+    # Bootstrap file — use Magento's autoloader if running inside Magento
+    # bootstrapFiles:
+    #     - /var/www/html/app/bootstrap.php
+
+# Extensions
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
