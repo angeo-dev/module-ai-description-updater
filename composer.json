@@ -2,7 +2,7 @@
     "name": "angeo/module-ai-description-updater",
     "description": "Automatically generate and update Magento 2 product descriptions using OpenAI, Anthropic Claude, or Google Gemini. Supports Google Sheets as SKU source, Google Drive CSV export, dry-run mode, per-store prompts and cron automation.",
     "type": "magento2-module",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "license": "MIT",
     "keywords": [
         "magento2", "openai", "claude", "gemini", "ai", "product description", "seo", "angeo"

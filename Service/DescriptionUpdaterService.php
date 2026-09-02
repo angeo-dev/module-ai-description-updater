@@ -5,11 +5,16 @@ declare(strict_types=1);
 namespace Angeo\AiDescriptionUpdater\Service;
 
 use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\Framework\Api\SearchCriteriaBuilder;
+use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
+use Magento\Framework\App\State;
+use Magento\Framework\App\Area;
 use Magento\Framework\Filesystem\DirectoryList;
+use Magento\Framework\Mail\Template\TransportBuilder;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\Store\Model\ScopeInterface;
 use Psr\Log\LoggerInterface;
 use Angeo\AiDescriptionUpdater\Model\Config;
+use Angeo\AiDescriptionUpdater\Service\Security\SpreadsheetValueSanitizer;
 
 class DescriptionUpdaterService
 {
@@ -19,10 +24,14 @@ class DescriptionUpdaterService
         private readonly MagentoProductService         $productService,
         private readonly GoogleSheetsService           $googleSheetsService,
         private readonly GoogleSheetsExportService     $googleSheetsExportService,
+        private readonly GoogleDriveService            $googleDriveService,
         private readonly ProductRepositoryInterface    $productRepository,
-        private readonly SearchCriteriaBuilder         $searchCriteriaBuilder,
+        private readonly ProductCollectionFactory      $productCollectionFactory,
         private readonly StoreManagerInterface         $storeManager,
         private readonly DirectoryList                 $directoryList,
+        private readonly State                         $appState,
+        private readonly TransportBuilder              $transportBuilder,
+        private readonly SpreadsheetValueSanitizer     $csvSanitizer,
         private readonly LoggerInterface               $logger,
     ) {}
 
@@ -38,12 +47,6 @@ class DescriptionUpdaterService
             return ['status' => 'skipped', 'reason' => 'Module disabled', 'processed' => 0, 'errors' => 0, 'dry_run' => false];
         }
 
-        $enabledAttributes = $this->config->getEnabledAttributes();
-        if (empty($enabledAttributes)) {
-            $this->logger->info('[Updater] No attributes enabled. Skipping.');
-            return ['status' => 'skipped', 'reason' => 'No attributes enabled', 'processed' => 0, 'errors' => 0, 'dry_run' => false];
-        }
-
         $stores     = $this->resolveStores($storeId);
         $allResults = [];
         $errors     = 0;
@@ -52,17 +55,33 @@ class DescriptionUpdaterService
             $sid       = (int) $store->getId();
             $storeName = $store->getName();
 
+            // Per-store config: prompts, language and enabled attributes resolve
+            // against this store view's scope.
+            $enabledAttributes = $this->config->getEnabledAttributes(ScopeInterface::SCOPE_STORE, $sid);
+            if (empty($enabledAttributes)) {
+                $this->logger->info('[Updater] No attributes enabled for store; skipping.', ['store_id' => $sid]);
+                continue;
+            }
+
             $this->logger->info('[Updater] Processing store', ['store_id' => $sid, 'name' => $storeName]);
 
-            $skus = $sku !== null ? [$sku] : $this->resolveSkus();
+            $skus = $sku !== null ? [$sku] : $this->resolveSkus($sid);
             if (empty($skus)) {
                 continue;
             }
-            if ($sku === null && !$this->config->isGoogleSheetsEnabled()) {
-                $skus = array_slice($skus, 0, $this->config->getBatchSize());
-            } elseif ($sku === null && $this->config->isGoogleSheetsEnabled()) {
-                $this->logger->info('[Updater] Google Sheets source — processing all SKUs without batch limit', [
-                    'count' => count($skus),
+
+            // Always enforce a batch cap to keep API spend bounded, even for the
+            // Google Sheets source. The offset advances run-to-run so the whole
+            // catalogue is eventually covered instead of re-processing the head.
+            if ($sku === null) {
+                $batchSize = $this->config->getBatchSize();
+                $offset    = $this->getProcessedOffset($sid, count($skus));
+                $skus      = array_slice($skus, $offset, $batchSize);
+                $this->logger->info('[Updater] Batch window', [
+                    'store_id' => $sid,
+                    'offset'   => $offset,
+                    'limit'    => $batchSize,
+                    'in_batch' => count($skus),
                 ]);
             }
 
@@ -73,9 +92,15 @@ class DescriptionUpdaterService
                 'dry_run'   => $isDryRun,
             ]);
 
+            $processedInStore = 0;
+
             foreach ($skus as $s) {
                 try {
-                    $allResults[] = $this->processOneSku($s, $sid, $storeName, $isDryRun);
+                    $allResults[] = $this->emulateStore(
+                        $sid,
+                        fn() => $this->processOneSku($s, $sid, $storeName, $isDryRun)
+                    );
+                    $processedInStore++;
                 } catch (\Throwable $e) {
                     $errors++;
                     $this->logger->error('[Updater] Error processing SKU', [
@@ -92,10 +117,19 @@ class DescriptionUpdaterService
                     ];
                 }
             }
+
+            if ($sku === null && !$isDryRun) {
+                $this->advanceProcessedOffset($sid, $processedInStore);
+            }
         }
 
+        $exportPath = null;
         if ($this->config->isCsvExportEnabled()) {
-            $this->saveCsv($allResults);
+            $exportPath = $this->saveCsv($allResults);
+        }
+
+        if ($this->config->isGoogleDriveEnabled() && $exportPath !== null) {
+            $this->uploadCsvToDrive($exportPath);
         }
 
         if ($this->config->isGoogleDriveEnabled()) {
@@ -109,11 +143,13 @@ class DescriptionUpdaterService
             'dry_run'   => $isDryRun,
         ];
 
+        $this->sendNotification($summary);
+
         $this->logger->info('[Updater] Run complete', $summary);
         return $summary;
     }
 
-    // ── Private ──────────────────────────────────────────────────────────────
+    // -- Private ---------------------------------------------------------------
 
     private function processOneSku(string $sku, int $storeId, string $storeName, bool $isDryRun): array
     {
@@ -121,7 +157,8 @@ class DescriptionUpdaterService
         $generated = $this->aiProviderService->generateAllAttributes(
             $product->getName(),
             $product->getSku(),
-            $storeName
+            $storeName,
+            $storeId
         );
 
         if ($isDryRun) {
@@ -138,6 +175,30 @@ class DescriptionUpdaterService
         return ['sku' => $sku, 'store_id' => $storeId, 'status' => 'updated', 'attributes' => $generated];
     }
 
+    /**
+     * Run a callback inside the store's area emulation so scope-aware config
+     * (per-store prompts, language) resolves against the correct store view.
+     *
+     * @template T
+     * @param callable():T $callback
+     * @return T
+     */
+    private function emulateStore(int $storeId, callable $callback): mixed
+    {
+        return $this->appState->emulateAreaCode(
+            Area::AREA_FRONTEND,
+            function () use ($storeId, $callback) {
+                $current = $this->storeManager->getStore()->getId();
+                $this->storeManager->setCurrentStore($storeId);
+                try {
+                    return $callback();
+                } finally {
+                    $this->storeManager->setCurrentStore($current);
+                }
+            }
+        );
+    }
+
     /** @return \Magento\Store\Api\Data\StoreInterface[] */
     private function resolveStores(?int $storeId): array
     {
@@ -151,47 +212,79 @@ class DescriptionUpdaterService
         ));
     }
 
-    /** @return string[] */
-    private function resolveSkus(): array
+    /**
+     * Resolve the list of SKUs to process for a store.
+     *
+     * For the catalogue source we load a SKU-only collection (no full product
+     * hydration) to avoid loading the whole catalogue into memory.
+     *
+     * @return string[]
+     */
+    private function resolveSkus(int $storeId): array
     {
         if ($this->config->isGoogleSheetsEnabled()) {
             return $this->googleSheetsService->fetchSkus();
         }
 
-        $criteria = $this->searchCriteriaBuilder
-            ->addFilter('status', 1)
-            ->create();
+        $collection = $this->productCollectionFactory->create();
+        $collection->addStoreFilter($storeId);
+        $collection->addAttributeToFilter('status', 1);
+        $collection->addAttributeToSelect('sku');
 
-        $products = $this->productRepository->getList($criteria)->getItems();
-        return array_map(fn($p) => $p->getSku(), $products);
+        $skus = [];
+        foreach ($collection->getItems() as $product) {
+            $skus[] = (string) $product->getSku();
+        }
+
+        return $skus;
     }
 
-    private function saveCsv(array $results): void
+    /**
+     * @return string|null Absolute path to the written CSV, or null on failure.
+     */
+    private function saveCsv(array $results): ?string
     {
         try {
             $dir = $this->directoryList->getPath('var') . '/angeo/ai_description_updater';
             if (!is_dir($dir)) {
-                mkdir($dir, 0755, true);
+                mkdir($dir, 0750, true);
             }
 
             $filepath  = $dir . '/' . $this->config->getCsvFilename();
             $fp        = fopen($filepath, 'w');
+            if ($fp === false) {
+                throw new \RuntimeException("Unable to open CSV file for writing: {$filepath}");
+            }
+
             $attrCodes = array_map(fn($a) => $a->attributeCode, $this->config->getEnabledAttributes());
 
-            fputcsv($fp, array_merge(['sku', 'store_id', 'status'], $attrCodes));
+            fputcsv($fp, $this->csvSanitizer->escapeRow(array_merge(['sku', 'store_id', 'status'], $attrCodes)));
 
             foreach ($results as $row) {
                 $line = [$row['sku'], $row['store_id'] ?? '', $row['status']];
                 foreach ($attrCodes as $code) {
                     $line[] = $row['attributes'][$code] ?? $row['message'] ?? '';
                 }
-                fputcsv($fp, $line);
+                // Escape every cell to neutralise CSV / formula injection.
+                fputcsv($fp, $this->csvSanitizer->escapeRow($line));
             }
 
             fclose($fp);
             $this->logger->info('[Updater] CSV saved', ['path' => $filepath]);
+            return $filepath;
         } catch (\Throwable $e) {
             $this->logger->error('[Updater] Failed to save CSV', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    private function uploadCsvToDrive(string $filepath): void
+    {
+        try {
+            $fileId = $this->googleDriveService->uploadFile($filepath, basename($filepath));
+            $this->logger->info('[Updater] CSV uploaded to Google Drive', ['file_id' => $fileId]);
+        } catch (\Throwable $e) {
+            $this->logger->error('[Updater] Google Drive upload failed', ['error' => $e->getMessage()]);
         }
     }
 
@@ -210,10 +303,78 @@ class DescriptionUpdaterService
                 $rows[] = $line;
             }
 
+            // Sheets export uses valueInputOption=RAW, so no formula evaluation.
             $this->googleSheetsExportService->writeRows($headers, $rows);
             $this->logger->info('[Updater] Exported to Google Sheets', ['rows' => count($rows)]);
         } catch (\Throwable $e) {
             $this->logger->error('[Updater] Google Sheets export failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    private function sendNotification(array $summary): void
+    {
+        $email = $this->config->getNotifyEmail();
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        try {
+            $body = sprintf(
+                "AI Description Updater run finished.\n\nStatus: %s\nProcessed: %d\nErrors: %d\nDry run: %s\n",
+                $summary['status'] ?? 'done',
+                $summary['processed'] ?? 0,
+                $summary['errors'] ?? 0,
+                ($summary['dry_run'] ?? false) ? 'Yes' : 'No'
+            );
+
+            $transport = $this->transportBuilder
+                ->setTemplateIdentifier('angeo_ai_description_summary')
+                ->setTemplateOptions([
+                    'area'  => Area::AREA_ADMINHTML,
+                    'store' => $this->storeManager->getDefaultStoreView()?->getId() ?? 0,
+                ])
+                ->setTemplateVars(['summary' => $body])
+                ->setFromByScope('general')
+                ->addTo($email)
+                ->getTransport();
+
+            $transport->sendMessage();
+            $this->logger->info('[Updater] Summary email sent', ['email' => $email]);
+        } catch (\Throwable $e) {
+            $this->logger->error('[Updater] Failed to send summary email', ['error' => $e->getMessage()]);
+        }
+    }
+
+    // -- Offset tracking (file-based, per store) -------------------------------
+
+    private function offsetFile(int $storeId): string
+    {
+        $dir = $this->directoryList->getPath('var') . '/angeo/ai_description_updater';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0750, true);
+        }
+        return $dir . '/offset_store_' . $storeId . '.txt';
+    }
+
+    private function getProcessedOffset(int $storeId, int $total): int
+    {
+        $file = $this->offsetFile($storeId);
+        if (!is_file($file)) {
+            return 0;
+        }
+        $offset = (int) trim((string) file_get_contents($file));
+        // Wrap around once the whole catalogue has been covered.
+        return ($total > 0 && $offset >= $total) ? 0 : max(0, $offset);
+    }
+
+    private function advanceProcessedOffset(int $storeId, int $processed): void
+    {
+        try {
+            $file    = $this->offsetFile($storeId);
+            $current = is_file($file) ? (int) trim((string) file_get_contents($file)) : 0;
+            file_put_contents($file, (string) ($current + $processed));
+        } catch (\Throwable $e) {
+            $this->logger->warning('[Updater] Could not persist offset', ['error' => $e->getMessage()]);
         }
     }
 }

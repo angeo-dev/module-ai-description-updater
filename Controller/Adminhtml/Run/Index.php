@@ -6,10 +6,16 @@ namespace Angeo\AiDescriptionUpdater\Controller\Adminhtml\Run;
 
 use Magento\Backend\App\Action;
 use Magento\Backend\App\Action\Context;
+use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\Controller\Result\JsonFactory;
+use Psr\Log\LoggerInterface;
 use Angeo\AiDescriptionUpdater\Service\DescriptionUpdaterService;
 
-class Index extends Action
+/**
+ * Triggers a manual run. POST-only so Magento enforces the admin form key
+ * (CSRF protection); a state-changing GET endpoint would be vulnerable.
+ */
+class Index extends Action implements HttpPostActionInterface
 {
     public const ADMIN_RESOURCE = 'Angeo_AiDescriptionUpdater::run';
 
@@ -17,6 +23,7 @@ class Index extends Action
         Context $context,
         private readonly JsonFactory                $jsonFactory,
         private readonly DescriptionUpdaterService  $updaterService,
+        private readonly LoggerInterface            $logger,
     ) {
         parent::__construct($context);
     }
@@ -37,7 +44,12 @@ class Index extends Action
                 'summary' => $summary,
             ]);
         } catch (\Throwable $e) {
-            $result->setData(['success' => false, 'message' => $e->getMessage()]);
+            // Log full detail; return a generic message (avoid leaking internals).
+            $this->logger->error('[Run] Manual run failed', ['exception' => $e->getMessage()]);
+            $result->setData([
+                'success' => false,
+                'message' => 'The run could not be completed. Check the log for details.',
+            ]);
         }
 
         return $result;

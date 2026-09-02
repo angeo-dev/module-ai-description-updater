@@ -235,7 +235,8 @@ class Config
         AttributeConfig $attrConfig,
         string $productName,
         string $productSku,
-        string $storeName = ''
+        string $storeName = '',
+        ?int $storeId = null
     ): string {
         $template = $attrConfig->promptOverride !== ''
             ? $attrConfig->promptOverride
@@ -247,11 +248,11 @@ class Config
             $template
         );
 
-        if ($this->isIncludeSeo()) {
+        if ($this->isIncludeSeo(ScopeInterface::SCOPE_STORE, $storeId)) {
             $prompt .= ' Optimise for SEO.';
         }
 
-        $lang = $this->getLanguage();
+        $lang = $this->getLanguage(ScopeInterface::SCOPE_STORE, $storeId);
         if ($lang !== 'en') {
             $prompt .= " Write in language code: {$lang}.";
         }
@@ -345,12 +346,13 @@ class Config
 
     public function getSpreadsheetId(): string
     {
-        return (string) $this->scopeConfig->getValue(self::XML_GS_SHEET_ID);
+        return $this->sanitizeGoogleId((string) $this->scopeConfig->getValue(self::XML_GS_SHEET_ID));
     }
 
     public function getSheetGid(): string
     {
-        return (string) $this->scopeConfig->getValue(self::XML_GS_GID) ?: '0';
+        $gid = (string) $this->scopeConfig->getValue(self::XML_GS_GID);
+        return preg_match('/^\\d+$/', $gid) ? $gid : '0';
     }
 
     public function getSkuColumnIndex(): int
@@ -374,8 +376,18 @@ class Config
 
     public function getCsvFilename(): string
     {
-        $pattern = (string) $this->scopeConfig->getValue(self::XML_EXPORT_FILE) ?: 'ai_descriptions_{{date}}.csv';
-        return str_replace('{{date}}', date('Y-m-d_His'), $pattern);
+        $pattern  = (string) $this->scopeConfig->getValue(self::XML_EXPORT_FILE) ?: 'ai_descriptions_{{date}}.csv';
+        $filename = str_replace('{{date}}', date('Y-m-d_His'), $pattern);
+
+        // Prevent path traversal and unsafe characters in the configured pattern.
+        $filename = basename($filename);
+        $filename = (string) preg_replace('/[^A-Za-z0-9._-]/', '_', $filename);
+
+        if ($filename === '' || $filename === '.' || $filename === '..') {
+            $filename = 'ai_descriptions_' . date('Y-m-d_His') . '.csv';
+        }
+
+        return $filename;
     }
 
     public function getNotifyEmail(): string
@@ -397,7 +409,17 @@ class Config
 
     public function getGoogleSheetsSpreadsheetId(): string
     {
-        return (string) $this->scopeConfig->getValue(self::XML_GD_SPREADSHEET);
+        return $this->sanitizeGoogleId((string) $this->scopeConfig->getValue(self::XML_GD_SPREADSHEET));
+    }
+
+    /**
+     * Google Drive / Sheets IDs only contain [A-Za-z0-9_-]. Anything else is
+     * rejected to prevent URL manipulation (SSRF) via admin configuration.
+     */
+    private function sanitizeGoogleId(string $id): string
+    {
+        $id = trim($id);
+        return preg_match('/^[A-Za-z0-9_-]{10,}$/', $id) ? $id : '';
     }
 
     public function getGoogleSheetsSheetName(): string

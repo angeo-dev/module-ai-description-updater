@@ -107,7 +107,7 @@ class GoogleSheetsExportService
     private function appendValues(string $spreadsheetId, string $range, array $values, string $token): void
     {
         $url = sprintf(
-            '%s/%s/values/%s:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
+            '%s/%s/values/%s:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
             self::SHEETS_BASE,
             urlencode($spreadsheetId),
             urlencode($range)

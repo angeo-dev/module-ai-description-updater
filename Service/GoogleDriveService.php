@@ -97,7 +97,9 @@ class GoogleDriveService
 
     private function findExistingFile(string $filename, string $folderId, string $token): ?string
     {
-        $escaped = addslashes($filename);
+        // Drive query strings escape \ and ' with a backslash; do this
+        // explicitly rather than relying on addslashes (which also escapes ").
+        $escaped = str_replace(['\\', "'"], ['\\\\', "\\'"], $filename);
         $query   = "name='{$escaped}' and trashed=false";
         if ($folderId) {
             $query .= " and '{$folderId}' in parents";

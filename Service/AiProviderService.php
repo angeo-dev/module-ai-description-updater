@@ -7,6 +7,8 @@ namespace Angeo\AiDescriptionUpdater\Service;
 use Angeo\AiDescriptionUpdater\Api\AiProviderInterface;
 use Angeo\AiDescriptionUpdater\Model\Config;
 use Angeo\AiDescriptionUpdater\Model\AttributeConfig;
+use Angeo\AiDescriptionUpdater\Service\Security\HtmlSanitizer;
+use Magento\Store\Model\ScopeInterface;
 
 /**
  * Selects the configured AI provider and delegates generation to it.
@@ -17,8 +19,9 @@ class AiProviderService
 {
     /** @param AiProviderInterface[] $providers keyed by provider ID */
     public function __construct(
-        private readonly Config $config,
-        private readonly array  $providers = [],
+        private readonly Config        $config,
+        private readonly HtmlSanitizer $htmlSanitizer,
+        private readonly array         $providers = [],
     ) {}
 
     /**
@@ -30,11 +33,18 @@ class AiProviderService
         AttributeConfig $attrConfig,
         string $productName,
         string $productSku,
-        string $storeName = ''
+        string $storeName = '',
+        ?int $storeId = null
     ): string {
         $provider = $this->resolveProvider();
-        $prompt   = $this->config->buildPromptForAttribute($attrConfig, $productName, $productSku, $storeName);
-        $raw      = $provider->generate($this->config->getSystemRole(), $prompt);
+        $prompt   = $this->config->buildPromptForAttribute(
+            $attrConfig,
+            $productName,
+            $productSku,
+            $storeName,
+            $storeId
+        );
+        $raw      = $provider->generate($this->config->getSystemRole(ScopeInterface::SCOPE_STORE, $storeId), $prompt);
 
         return $this->postProcess($raw, $attrConfig);
     }
@@ -48,15 +58,17 @@ class AiProviderService
     public function generateAllAttributes(
         string $productName,
         string $productSku,
-        string $storeName = ''
+        string $storeName = '',
+        ?int $storeId = null
     ): array {
         $results = [];
-        foreach ($this->config->getEnabledAttributes() as $attrConfig) {
+        foreach ($this->config->getEnabledAttributes(ScopeInterface::SCOPE_STORE, $storeId) as $attrConfig) {
             $results[$attrConfig->attributeCode] = $this->generateForAttribute(
                 $attrConfig,
                 $productName,
                 $productSku,
-                $storeName
+                $storeName,
+                $storeId
             );
         }
         return $results;
@@ -95,7 +107,11 @@ class AiProviderService
     {
         $value = trim($raw);
 
-        if (!$attrConfig->isHtml) {
+        if ($attrConfig->isHtml) {
+            // Untrusted model output rendered as HTML on the storefront —
+            // run through the whitelist sanitizer to prevent stored XSS.
+            $value = $this->htmlSanitizer->sanitize($value);
+        } else {
             $value = strip_tags($value);
             $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
             $value = trim($value);

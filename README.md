@@ -296,8 +296,17 @@ See [Google Sheets export setup](#google-sheets--export-setup-service-account) f
 
 | Field | Default | Description |
 |---|---|---|
-| Save CSV Report | Yes | Save results to `var/angeo/ai_description_updater/` |
-| CSV Filename Pattern | `ai_descriptions_{{date}}.csv` | Supports `{{date}}` placeholder |
+| Save CSV Report | Yes | Save results to `var/angeo/ai_description_updater/`. All cell values are sanitised against CSV/formula injection. |
+| CSV Filename Pattern | `ai_descriptions_{{date}}.csv` | Supports `{{date}}` placeholder. Sanitised to a safe filename (no path traversal). |
+| Notify Email | — | If set to a valid address, a run-summary email (status, processed count, errors, dry-run flag) is sent after each run. |
+
+When **Google Sheets — export → Enable** is on, the saved CSV is also uploaded to Google Drive via the configured Service Account, in addition to the structured Sheets export.
+
+### Batching and cost control
+
+Each run processes at most **Batch Size** SKUs per store view (including when the SKU source is Google Sheets). A per-store offset is persisted in `var/angeo/ai_description_updater/offset_store_<id>.txt`, so consecutive runs advance through the catalogue instead of repeatedly re-processing the first N products. The offset wraps back to the start once the whole catalogue has been covered. This keeps AI API spend bounded and predictable.
+
+To reset progress for a store, delete its offset file.
 
 ---
 
@@ -343,6 +352,8 @@ When run without `--store`, the module processes **every active non-admin store 
 
 For each store view:
 - Product is loaded in that store's scope
+- Per-store configuration (prompt template, language, enabled attributes) is read in that store view's scope — set different prompts or languages per store view and they are honoured
+- Generation runs inside store-area emulation so store-scoped settings resolve correctly
 - `{{store_name}}` in the prompt is replaced with the store view name
 - Generated content is saved in that store's scope — not the global default scope
 
@@ -526,6 +537,22 @@ Log entries include: run start/complete, per-SKU status (`updated` / `dry_run` /
 | [`angeo/module-rich-data`](https://packagist.org/packages/angeo/module-rich-data) | Injects Product, Organization, FAQPage JSON-LD schema |
 | [`angeo/module-openai-product-feed`](https://packagist.org/packages/angeo/module-openai-product-feed) | ChatGPT Shopping product feed generator |
 | [`angeo/module-aeo-brand-visibility`](https://packagist.org/packages/angeo/module-aeo-brand-visibility) | Live brand visibility audit across ChatGPT, Gemini, Perplexity |
+
+---
+
+## Security
+
+This module treats AI output and external data sources as untrusted:
+
+- **Stored XSS protection** — content generated for the HTML `description` attribute is passed through a whitelist HTML sanitiser before saving. Only a safe subset of formatting tags is kept; `<script>`, event-handler attributes (`onerror`, `onclick`, …) and `javascript:` URLs are stripped.
+- **CSV / formula injection protection** — every cell written to a CSV export is escaped (values starting with `=`, `+`, `-`, `@` are prefixed with `'`). The Google Sheets export uses `valueInputOption=RAW`, so values are never evaluated as formulas server-side.
+- **SSRF hardening** — the Google Sheets CSV fetch is restricted to `docs.google.com` over HTTPS only, with bounded redirects that may not downgrade to non-HTTPS targets. Spreadsheet/Drive IDs are validated against `[A-Za-z0-9_-]`.
+- **Path-traversal protection** — the CSV filename pattern is reduced to a safe basename.
+- **CSRF** — admin controllers are POST-only (`HttpPostActionInterface`), so Magento enforces the admin form key.
+- **Secrets** — all API keys and the Service Account JSON are stored encrypted (`backend_model = Encrypted`) and never written to logs.
+- **Error handling** — admin endpoints return generic messages; full exception detail goes to the dedicated log only.
+
+If you discover a security issue, please email [info@angeo.dev](mailto:info@angeo.dev) rather than opening a public issue.
 
 ---
 

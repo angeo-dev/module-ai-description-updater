@@ -7,11 +7,15 @@ namespace Angeo\AiDescriptionUpdater\Controller\Adminhtml\Test;
 use Magento\Backend\App\Action;
 use Magento\Backend\App\Action\Context;
 use Magento\Catalog\Api\ProductRepositoryInterface;
+use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\Controller\Result\JsonFactory;
+use Psr\Log\LoggerInterface;
 use Angeo\AiDescriptionUpdater\Service\AiProviderService;
-use Angeo\AiDescriptionUpdater\Model\Config;
 
-class Index extends Action
+/**
+ * Generates a preview for a single SKU. POST-only (admin form-key / CSRF).
+ */
+class Index extends Action implements HttpPostActionInterface
 {
     public const ADMIN_RESOURCE = 'Angeo_AiDescriptionUpdater::run';
 
@@ -20,7 +24,7 @@ class Index extends Action
         private readonly JsonFactory                $jsonFactory,
         private readonly AiProviderService          $aiProviderService,
         private readonly ProductRepositoryInterface $productRepository,
-        private readonly Config                     $config,
+        private readonly LoggerInterface            $logger,
     ) {
         parent::__construct($context);
     }
@@ -28,7 +32,7 @@ class Index extends Action
     public function execute()
     {
         $result = $this->jsonFactory->create();
-        $sku    = (string) $this->getRequest()->getParam('sku');
+        $sku    = trim((string) $this->getRequest()->getParam('sku'));
 
         if ($sku === '') {
             return $result->setData(['success' => false, 'message' => 'SKU is required.']);
@@ -47,7 +51,14 @@ class Index extends Action
                 'attributes' => $generated,
             ]);
         } catch (\Throwable $e) {
-            $result->setData(['success' => false, 'message' => $e->getMessage()]);
+            $this->logger->error('[Test] Preview generation failed', [
+                'sku'       => $sku,
+                'exception' => $e->getMessage(),
+            ]);
+            $result->setData([
+                'success' => false,
+                'message' => 'Could not generate a preview for this SKU. Check the log for details.',
+            ]);
         }
 
         return $result;

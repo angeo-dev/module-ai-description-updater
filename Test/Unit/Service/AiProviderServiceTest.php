@@ -8,6 +8,7 @@ use Angeo\AiDescriptionUpdater\Api\AiProviderInterface;
 use Angeo\AiDescriptionUpdater\Model\AttributeConfig;
 use Angeo\AiDescriptionUpdater\Model\Config;
 use Angeo\AiDescriptionUpdater\Service\AiProviderService;
+use Angeo\AiDescriptionUpdater\Service\Security\HtmlSanitizer;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -19,12 +20,14 @@ class AiProviderServiceTest extends TestCase
     private Config&MockObject $config;
     private AiProviderInterface&MockObject $providerA;
     private AiProviderInterface&MockObject $providerB;
+    private HtmlSanitizer $htmlSanitizer;
 
     protected function setUp(): void
     {
         $this->config    = $this->createMock(Config::class);
         $this->providerA = $this->createMock(AiProviderInterface::class);
         $this->providerB = $this->createMock(AiProviderInterface::class);
+        $this->htmlSanitizer = new HtmlSanitizer();
     }
 
     // ── resolveProvider ──────────────────────────────────────────────────────
@@ -33,7 +36,7 @@ class AiProviderServiceTest extends TestCase
     {
         $this->config->method('getAiProvider')->willReturn('unknown');
 
-        $service = new AiProviderService($this->config, ['openai' => $this->providerA]);
+        $service = new AiProviderService($this->config, $this->htmlSanitizer, ['openai' => $this->providerA]);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageMatches("/provider 'unknown' is not registered/i");
@@ -47,7 +50,7 @@ class AiProviderServiceTest extends TestCase
         $this->providerA->method('isConfigured')->willReturn(false);
         $this->providerA->method('getProviderLabel')->willReturn('Groq (llama)');
 
-        $service = new AiProviderService($this->config, ['groq' => $this->providerA]);
+        $service = new AiProviderService($this->config, $this->htmlSanitizer, ['groq' => $this->providerA]);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageMatches("/not configured/i");
@@ -61,7 +64,7 @@ class AiProviderServiceTest extends TestCase
         $this->providerA->method('isConfigured')->willReturn(true);
         $this->providerA->method('getProviderLabel')->willReturn('Groq (llama-3.3-70b-versatile)');
 
-        $service = new AiProviderService($this->config, ['groq' => $this->providerA]);
+        $service = new AiProviderService($this->config, $this->htmlSanitizer, ['groq' => $this->providerA]);
 
         $this->assertSame('Groq (llama-3.3-70b-versatile)', $service->getActiveProviderLabel());
     }
@@ -86,7 +89,7 @@ class AiProviderServiceTest extends TestCase
             ->method('generate')
             ->willReturn('<p>Generated content.</p>');
 
-        $service = new AiProviderService($this->config, ['openai' => $this->providerA]);
+        $service = new AiProviderService($this->config, $this->htmlSanitizer, ['openai' => $this->providerA]);
 
         $result = $service->generateAllAttributes('Gold Ring', 'SKU-001', 'Dutch Store');
 
@@ -107,7 +110,7 @@ class AiProviderServiceTest extends TestCase
         $this->providerA->method('getProviderLabel')->willReturn('OpenAI');
         $this->providerA->method('generate')->willReturn('<strong>Gold Ring 18k</strong>');
 
-        $service = new AiProviderService($this->config, ['openai' => $this->providerA]);
+        $service = new AiProviderService($this->config, $this->htmlSanitizer, ['openai' => $this->providerA]);
         $result  = $service->generateAllAttributes('Gold Ring', 'SKU-001');
 
         $this->assertSame('Gold Ring 18k', $result['meta_title']);
@@ -126,7 +129,7 @@ class AiProviderServiceTest extends TestCase
         $this->providerA->method('getProviderLabel')->willReturn('OpenAI');
         $this->providerA->method('generate')->willReturn('This is a very long text that exceeds the limit');
 
-        $service = new AiProviderService($this->config, ['openai' => $this->providerA]);
+        $service = new AiProviderService($this->config, $this->htmlSanitizer, ['openai' => $this->providerA]);
         $result  = $service->generateAllAttributes('Product', 'SKU');
 
         $this->assertLessThanOrEqual(20, mb_strlen($result['short_description']));
@@ -144,7 +147,7 @@ class AiProviderServiceTest extends TestCase
         $this->providerB->method('isConfigured')->willReturn(true);
         $this->providerB->method('getProviderLabel')->willReturn('Claude (claude-sonnet-4-6)');
 
-        $service = new AiProviderService($this->config, [
+        $service = new AiProviderService($this->config, $this->htmlSanitizer, [
             'openai' => $this->providerA,
             'claude' => $this->providerB,
         ]);

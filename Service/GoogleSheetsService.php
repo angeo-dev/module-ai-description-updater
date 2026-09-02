@@ -23,7 +23,10 @@ class GoogleSheetsService
     public function fetchSkus(): array
     {
         $url = $this->config->getGoogleSheetCsvUrl();
-        $this->logger->info('[GoogleSheets] Fetching spreadsheet', ['url' => $url]);
+        $this->logger->info('[GoogleSheets] Fetching spreadsheet', [
+            'spreadsheet_id' => $this->config->getSpreadsheetId(),
+            'gid'            => $this->config->getSheetGid(),
+        ]);
 
         $csv  = $this->downloadCsv($url);
         $rows = $this->parseCsv($csv);
@@ -52,12 +55,26 @@ class GoogleSheetsService
      */
     private function downloadCsv(string $url): string
     {
+        // Only allow the expected Google host. Defends against SSRF if the
+        // configured ID ever produced an unexpected URL.
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        if ($host !== 'docs.google.com') {
+            throw new \RuntimeException('Refusing to fetch non-Google Sheets URL.');
+        }
+
         $ch = curl_init();
         curl_setopt_array($ch, [
-            CURLOPT_URL            => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_URL              => $url,
+            CURLOPT_RETURNTRANSFER   => true,
+            // Restrict to HTTPS and follow at most a few redirects, never to
+            // non-HTTPS targets (blocks redirect-based SSRF to internal hosts).
+            CURLOPT_PROTOCOLS        => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS  => CURLPROTO_HTTPS,
+            CURLOPT_FOLLOWLOCATION   => true,
+            CURLOPT_MAXREDIRS        => 5,
+            CURLOPT_SSL_VERIFYPEER   => true,
+            CURLOPT_SSL_VERIFYHOST   => 2,
+            CURLOPT_TIMEOUT          => 30,
         ]);
         $response  = curl_exec($ch);
         $curlError = curl_error($ch);
@@ -78,6 +95,9 @@ class GoogleSheetsService
 
     private function parseCsv(string $content): array
     {
-        return array_map('str_getcsv', explode("\n", trim($content)));
+        return array_map(
+            static fn(string $line): array => str_getcsv($line, ',', '"', '\\'),
+            explode("\n", trim($content))
+        );
     }
 }
